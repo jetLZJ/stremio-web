@@ -167,8 +167,10 @@ const MetaDetails = ({ urlParams, queryParams }) => {
                                             links={metaDetails.metaItem.content.content.links}
                                             trailerStreams={metaDetails.metaItem.content.content.trailerStreams}
                                             inLibrary={metaDetails.metaItem.content.content.inLibrary}
+                                            watched={metaDetails.metaItem.content.content.watched}
                                             toggleInLibrary={metaDetails.metaItem.content.content.inLibrary ? removeFromLibrary : addToLibrary}
                                             metaId={metaDetails.metaItem.content.content.id}
+                                            libraryItem={metaDetails.libraryItem}
                                             ratingInfo={metaDetails.ratingInfo}
                                         />
                                     </React.Fragment>

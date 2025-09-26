@@ -157,21 +157,104 @@ const Discover = ({ urlParams, queryParams }) => {
                                     </div>
                                     :
                                     <div ref={metasContainerRef} className={classnames(styles['meta-items-container'], 'animation-fade-in')} onScroll={onScroll} onFocusCapture={metaItemsOnFocusCapture}>
-                                        {discover.catalog.content.content.map((metaItem, index) => (
-                                            <MetaItem
-                                                key={index}
-                                                className={classnames({ 'selected': selectedMetaItemIndex === index })}
-                                                type={metaItem.type}
-                                                name={metaItem.name}
-                                                poster={metaItem.poster}
-                                                posterShape={metaItem.posterShape}
-                                                playname={selectedMetaItemIndex === index}
-                                                deepLinks={metaItem.deepLinks}
-                                                watched={metaItem.watched}
-                                                data-index={index}
-                                                onClick={metaItemOnClick}
-                                            />
-                                        ))}
+                                        {discover.catalog.content.content.map((metaItem, index) => {
+                                            const options = [
+                                                { label: 'LIBRARY_PLAY', value: 'play' },
+                                                { label: 'LIBRARY_DETAILS', value: 'details' },
+                                                { label: metaItem.watched ? 'CTX_MARK_UNWATCHED' : 'CTX_MARK_WATCHED', value: 'watched' }
+                                            ].filter(({ value }) => {
+                                                switch (value) {
+                                                    case 'play':
+                                                        return metaItem.deepLinks && typeof metaItem.deepLinks.player === 'string';
+                                                    case 'details':
+                                                        return metaItem.deepLinks && (typeof metaItem.deepLinks.metaDetailsVideos === 'string' || typeof metaItem.deepLinks.metaDetailsStreams === 'string');
+                                                    case 'watched':
+                                                        return true;
+                                                }
+                                            }).map((option) => ({ ...option, label: t(option.label) }));
+
+                                            const optionOnSelect = (event) => {
+                                                if (event.nativeEvent && event.nativeEvent.optionSelectPrevented) {
+                                                    return;
+                                                }
+
+                                                switch (event.value) {
+                                                    case 'play': {
+                                                        if (metaItem.deepLinks && typeof metaItem.deepLinks.player === 'string') {
+                                                            window.location = metaItem.deepLinks.player;
+                                                        }
+
+                                                        break;
+                                                    }
+                                                    case 'details': {
+                                                        if (metaItem.deepLinks) {
+                                                            if (typeof metaItem.deepLinks.metaDetailsVideos === 'string') {
+                                                                window.location = metaItem.deepLinks.metaDetailsVideos;
+                                                            } else if (typeof metaItem.deepLinks.metaDetailsStreams === 'string') {
+                                                                window.location = metaItem.deepLinks.metaDetailsStreams;
+                                                            }
+                                                        }
+
+                                                        break;
+                                                    }
+                                                    case 'watched': {
+                                                        if (metaItem.inLibrary) {
+                                                            core.transport.dispatch({
+                                                                action: 'Ctx',
+                                                                args: {
+                                                                    action: 'LibraryItemMarkAsWatched',
+                                                                    args: {
+                                                                        id: metaItem.id,
+                                                                        is_watched: !metaItem.watched
+                                                                    }
+                                                                }
+                                                            });
+                                                        } else {
+                                                            core.transport.dispatch({
+                                                                action: 'Ctx',
+                                                                args: {
+                                                                    action: 'AddToLibrary',
+                                                                    args: metaItem
+                                                                }
+                                                            });
+
+                                                            setTimeout(() => {
+                                                                core.transport.dispatch({
+                                                                    action: 'Ctx',
+                                                                    args: {
+                                                                        action: 'LibraryItemMarkAsWatched',
+                                                                        args: {
+                                                                            id: metaItem.id,
+                                                                            is_watched: true
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }, 300);
+                                                        }
+
+                                                        break;
+                                                    }
+                                                }
+                                            };
+
+                                            return (
+                                                <MetaItem
+                                                    key={index}
+                                                    className={classnames({ 'selected': selectedMetaItemIndex === index })}
+                                                    type={metaItem.type}
+                                                    name={metaItem.name}
+                                                    poster={metaItem.poster}
+                                                    posterShape={metaItem.posterShape}
+                                                    playname={selectedMetaItemIndex === index}
+                                                    deepLinks={metaItem.deepLinks}
+                                                    watched={metaItem.watched}
+                                                    data-index={index}
+                                                    onClick={metaItemOnClick}
+                                                    options={options}
+                                                    optionOnSelect={optionOnSelect}
+                                                />
+                                            );
+                                        })}
                                     </div>
                     }
                 </div>

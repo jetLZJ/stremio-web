@@ -213,6 +213,41 @@
         margin-bottom: 1rem;
         margin-right: 1rem;
     }
+
+    .watched-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+        /* match spacing used between action buttons */
+        margin-right: 1rem;
+    }
+
+    .eye-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 4rem;
+        height: 4rem;
+        border-radius: 100%;
+        background-color: var(--overlay-color);
+        backdrop-filter: blur(5px);
+        transition: background-color 0.1s ease-out;
+
+        &:hover, &:focus {
+            outline: var(--focus-outline-size) solid var(--primary-foreground-color);
+            background-color: transparent;
+        }
+    }
+
+    .icon {
+        display: block;
+        width: 1.75rem;
+        height: 1.75rem;
+        color: var(--primary-foreground-color);
+        opacity: 0.9;
+    }
+
 }
 
 .share-prompt {

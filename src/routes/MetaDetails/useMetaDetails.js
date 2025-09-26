@@ -26,7 +26,9 @@ const map = (metaDetails) => ({
                                 :
                                 NaN
                         ),
-                    }))
+                    })),
+                    watched: (metaDetails.libraryItem && metaDetails.libraryItem.state && (metaDetails.libraryItem.state.watched ?? metaDetails.libraryItem.state.is_watched)) ?? metaDetails.metaItem.content.content.watched,
+                    inLibrary: !!metaDetails.libraryItem,
                 }
             }
         }
