@@ -10,6 +10,7 @@ const { default: Button } = require('stremio/components/Button');
 const { default: Image } = require('stremio/components/Image');
 const ModalDialog = require('stremio/components/ModalDialog');
 const SharePrompt = require('stremio/components/SharePrompt');
+const { useServices } = require('stremio/services');
 const CONSTANTS = require('stremio/common/CONSTANTS');
 const routesRegexp = require('stremio/common/routesRegexp');
 const useBinaryState = require('stremio/common/useBinaryState');
@@ -25,8 +26,9 @@ const ALLOWED_LINK_REDIRECTS = [
     routesRegexp.metadetails.regexp
 ];
 
-const MetaPreview = React.forwardRef(({ className, compact, name, logo, background, runtime, releaseInfo, released, description, deepLinks, links, trailerStreams, inLibrary, toggleInLibrary, ratingInfo }, ref) => {
+const MetaPreview = React.forwardRef(({ className, compact, name, logo, background, runtime, releaseInfo, released, description, deepLinks, links, trailerStreams, inLibrary, toggleInLibrary, ratingInfo, metaId, libraryItem, watched }, ref) => {
     const { t } = useTranslation();
+    const { core } = useServices();
     const [shareModalOpen, openShareModal, closeShareModal] = useBinaryState(false);
     const linksGroups = React.useMemo(() => {
         return Array.isArray(links) ?
@@ -73,6 +75,26 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
             :
             new Map();
     }, [links]);
+    const normalizeWatched = React.useCallback((val) => {
+        let v = val;
+        while (v && typeof v === 'object' && ('value' in v || 'val' in v)) {
+            v = v.value ?? v.val;
+        }
+
+        if (v === true || v === 'true') return true;
+        if (v === false || v === 'false') return false;
+        if (typeof v === 'number') return v !== 0;
+        if (typeof v === 'string') {
+            const s = v.trim();
+            if (s === '0') return false;
+            if (s === '1') return true;
+            if (s.length === 0) return false;
+            return s.toLowerCase() !== 'false';
+        }
+
+        return !!v;
+    }, []);
+
     const showHref = React.useMemo(() => {
         return deepLinks ?
             typeof deepLinks.player === 'string' ?
@@ -88,6 +110,37 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
             :
             null;
     }, [deepLinks]);
+    const pendingMarkRef = React.useRef(null);
+    const [optimisticWatched, setOptimisticWatched] = React.useState(null);
+
+    React.useEffect(() => {
+        if (!pendingMarkRef.current) return;
+        const pending = pendingMarkRef.current;
+        // If we now have a libraryItem._id or metaId, dispatch the mark action
+        if ((libraryItem && libraryItem._id) || metaId) {
+            const id = (libraryItem && libraryItem._id) || metaId;
+            core.transport.dispatch({
+                action: 'Ctx',
+                args: {
+                    action: 'LibraryItemMarkAsWatched',
+                    args: {
+                        id,
+                        is_watched: pending.is_watched
+                    }
+                }
+            });
+            pendingMarkRef.current = null;
+        }
+    }, [libraryItem, metaId, core.transport]);
+
+    React.useEffect(() => {
+        const curStateVal = (libraryItem && libraryItem.state && (libraryItem.state.watched ?? libraryItem.state.is_watched)) ?? watched;
+        const actual = normalizeWatched(curStateVal);
+        if (optimisticWatched !== null && optimisticWatched !== actual) {
+            // authoritative state differs from optimistic — sync
+            setOptimisticWatched(null);
+        }
+    }, [libraryItem, watched, normalizeWatched]);
     const trailerHref = React.useMemo(() => {
         if (!Array.isArray(trailerStreams) || trailerStreams.length === 0) {
             return null;
@@ -235,10 +288,75 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                 }
                 {
                     !compact && ratingInfo !== null ?
-                        <Ratings
-                            ratingInfo={ratingInfo}
-                            className={styles['ratings']}
-                        />
+                        <React.Fragment>
+                            <Ratings
+                                ratingInfo={ratingInfo}
+                                className={styles['ratings']}
+                            />
+                            {
+                                (libraryItem || typeof inLibrary === 'boolean') ?
+                                    <div className={styles['watched-container']}>
+                                        <Button
+                                            className={styles['eye-button']}
+                                            title={(function () {
+                                                const cur = (libraryItem && libraryItem.state && (libraryItem.state.watched ?? libraryItem.state.is_watched)) ?? watched;
+                                                const actual = normalizeWatched(cur);
+                                                const display = optimisticWatched !== null ? optimisticWatched : actual;
+                                                return display ? t('CTX_MARK_NON_WATCHED') : t('CTX_MARK_WATCHED');
+                                            })()}
+                                            onClick={() => {
+                                                const curStateVal = (libraryItem && libraryItem.state && (libraryItem.state.watched ?? libraryItem.state.is_watched)) ?? watched;
+                                                const actualWatched = normalizeWatched(curStateVal);
+                                                const targetWatched = !actualWatched;
+
+                                                if (typeof inLibrary === 'boolean' && inLibrary && metaId) {
+                                                    core.transport.dispatch({
+                                                        action: 'Ctx',
+                                                        args: {
+                                                            action: 'LibraryItemMarkAsWatched',
+                                                            args: {
+                                                                id: metaId,
+                                                                is_watched: targetWatched
+                                                            }
+                                                        }
+                                                    });
+                                                    setOptimisticWatched(targetWatched);
+                                                    return;
+                                                }
+
+                                                if (libraryItem && libraryItem._id) {
+                                                    core.transport.dispatch({
+                                                        action: 'Ctx',
+                                                        args: {
+                                                            action: 'LibraryItemMarkAsWatched',
+                                                            args: {
+                                                                id: libraryItem._id,
+                                                                is_watched: targetWatched
+                                                            }
+                                                        }
+                                                    });
+                                                    setOptimisticWatched(targetWatched);
+                                                    return;
+                                                }
+
+                                                if (typeof toggleInLibrary === 'function') {
+                                                    pendingMarkRef.current = { is_watched: targetWatched };
+                                                    setOptimisticWatched(targetWatched);
+                                                    toggleInLibrary();
+                                                }
+                                            }}
+                                        >
+                                            {(() => {
+                                                const cur = (libraryItem && libraryItem.state && (libraryItem.state.watched ?? libraryItem.state.is_watched)) ?? watched;
+                                                const actualWatched = normalizeWatched(cur);
+                                                const displayWatched = optimisticWatched !== null ? optimisticWatched : actualWatched;
+                                                return <Icon className={styles['icon']} name={displayWatched ? 'eye-off' : 'eye'} />;
+                                            })()}
+                                        </Button>
+                                    </div>
+                                    : null
+                            }
+                        </React.Fragment>
                         :
                         null
                 }
@@ -299,6 +417,12 @@ MetaPreview.propTypes = {
     inLibrary: PropTypes.bool,
     toggleInLibrary: PropTypes.func,
     ratingInfo: PropTypes.object,
+    metaId: PropTypes.string,
+    libraryItem: PropTypes.shape({
+        _id: PropTypes.string,
+        state: PropTypes.object
+    }),
+    watched: PropTypes.bool,
 };
 
 module.exports = MetaPreview;
